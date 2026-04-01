@@ -10,16 +10,15 @@ pool:
   name: test
 
 variables:
-  JAVA_HOME: 'C:\Users\Madhu Murundi\AnypointCodeBuilder\java\jdk-17.0.13+11'
-  JAVA_HOME_11_X64: 'C:\Users\Madhu Murundi\AnypointCodeBuilder\java\jdk-17.0.13+11'
-  PATH: '$(JAVA_HOME)\bin;C:\maven\apache-maven-3.9.14\bin;$(PATH)'
+  JAVA_HOME: 'C:\java\jdk-17'
+  JAVA_HOME_11_X64: 'C:\java\jdk-17'
 
 steps:
 - task: Maven@3
   inputs:
     mavenPomFile: 'pom.xml'
     javaHomeOption: 'Path'
-    jdkDirectory: 'C:\Users\Madhu Murundi\AnypointCodeBuilder\java\jdk-17.0.13+11'
+    jdkDirectory: 'C:\java\jdk-17'
     jdkArchitectureOption: 'x64'
     publishJUnitResults: true
     testResultsFiles: '**/surefire-reports/TEST-*.xml'
