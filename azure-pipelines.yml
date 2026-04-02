@@ -1,8 +1,4 @@
-# Maven
-# Build your Java project and run tests with Apache Maven.
-# Add steps that analyze code, save build artifacts, deploy, and more:
-# https://docs.microsoft.com/azure/devops/pipelines/languages/java
-
+# Maven - Multi-Stage Pipeline
 trigger:
 - main
 
@@ -12,14 +8,80 @@ pool:
 variables:
   JAVA_HOME: 'C:\java\jdk-17'
   JAVA_HOME_11_X64: 'C:\java\jdk-17'
+  buildConfig: 'package'
+  artifactName: 'java-drop'
 
-steps:
-- task: Maven@3
-  inputs:
-    mavenPomFile: 'pom.xml'
-    javaHomeOption: 'Path'
-    jdkDirectory: 'C:\java\jdk-17'
-    jdkArchitectureOption: 'x64'
-    publishJUnitResults: true
-    testResultsFiles: '**/surefire-reports/TEST-*.xml'
-    goals: 'package'
+stages:
+
+# ─── STAGE 1: BUILD ───────────────────────────────────────
+- stage: Build
+  displayName: 'Build & Compile'
+  jobs:
+  - job: MavenBuild
+    displayName: 'Maven Build'
+    steps:
+    - task: Maven@3
+      displayName: 'Compile & Package'
+      inputs:
+        mavenPomFile: 'pom.xml'
+        javaHomeOption: 'Path'
+        jdkDirectory: 'C:\java\jdk-17'
+        jdkArchitectureOption: 'x64'
+        publishJUnitResults: false   # moved to Test stage
+        goals: 'compile'             # compile only, no tests yet
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish JAR artifact'
+      inputs:
+        pathToPublish: '$(Build.ArtifactStagingDirectory)'
+        artifactName: $(artifactName)
+
+# ─── STAGE 2: TEST ────────────────────────────────────────
+- stage: Test
+  displayName: 'Run Tests'
+  dependsOn: Build               # only runs if Build succeeds
+  jobs:
+  - job: MavenTest
+    displayName: 'Maven Test'
+    steps:
+    - task: Maven@3
+      displayName: 'Run unit tests'
+      inputs:
+        mavenPomFile: 'pom.xml'
+        javaHomeOption: 'Path'
+        jdkDirectory: 'C:\java\jdk-17'
+        jdkArchitectureOption: 'x64'
+        publishJUnitResults: true       # JUnit results published here
+        testResultsFiles: '**/surefire-reports/TEST-*.xml'
+        goals: 'test'
+
+# ─── STAGE 3: PACKAGE & DEPLOY ────────────────────────────
+- stage: Deploy
+  displayName: 'Package & Deploy'
+  dependsOn: Test                # only runs if Test succeeds
+  condition: succeeded()         # explicit guard
+  jobs:
+  - job: MavenPackage
+    displayName: 'Package JAR'
+    steps:
+    - task: Maven@3
+      displayName: 'mvn package (final JAR)'
+      inputs:
+        mavenPomFile: 'pom.xml'
+        javaHomeOption: 'Path'
+        jdkDirectory: 'C:\java\jdk-17'
+        jdkArchitectureOption: 'x64'
+        publishJUnitResults: false
+        goals: 'package -DskipTests'   # tests already ran in Stage 2
+
+    - task: CopyFiles@2
+      displayName: 'Copy JAR to staging'
+      inputs:
+        contents: '**/target/*.jar'
+        targetFolder: '$(Build.ArtifactStagingDirectory)'
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish final artifact'
+      inputs:
+        pathToPublish: '$(Build.ArtifactStagingDirectory)'
+        artifactName: $(artifactName)
