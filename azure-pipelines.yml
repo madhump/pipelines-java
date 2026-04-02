@@ -27,8 +27,8 @@ stages:
         javaHomeOption: 'Path'
         jdkDirectory: 'C:\java\jdk-17'
         jdkArchitectureOption: 'x64'
-        publishJUnitResults: false   # moved to Test stage
-        goals: 'compile'             # compile only, no tests yet
+        publishJUnitResults: false
+        goals: 'compile'
 
     - task: PublishBuildArtifacts@1
       displayName: 'Publish JAR artifact'
@@ -39,7 +39,7 @@ stages:
 # ─── STAGE 2: TEST ────────────────────────────────────────
 - stage: Test
   displayName: 'Run Tests'
-  dependsOn: Build               # only runs if Build succeeds
+  dependsOn: Build
   jobs:
   - job: MavenTest
     displayName: 'Maven Test'
@@ -51,37 +51,41 @@ stages:
         javaHomeOption: 'Path'
         jdkDirectory: 'C:\java\jdk-17'
         jdkArchitectureOption: 'x64'
-        publishJUnitResults: true       # JUnit results published here
+        publishJUnitResults: true
         testResultsFiles: '**/surefire-reports/TEST-*.xml'
         goals: 'test'
 
 # ─── STAGE 3: PACKAGE & DEPLOY ────────────────────────────
 - stage: Deploy
   displayName: 'Package & Deploy'
-  dependsOn: Test                # only runs if Test succeeds
-  condition: succeeded()         # explicit guard
+  dependsOn: Test
+  condition: succeeded()
   jobs:
-  - job: MavenPackage
+  - deployment: MavenPackage
     displayName: 'Package JAR'
-    steps:
-    - task: Maven@3
-      displayName: 'mvn package (final JAR)'
-      inputs:
-        mavenPomFile: 'pom.xml'
-        javaHomeOption: 'Path'
-        jdkDirectory: 'C:\java\jdk-17'
-        jdkArchitectureOption: 'x64'
-        publishJUnitResults: false
-        goals: 'package -DskipTests'   # tests already ran in Stage 2
+    environment: 'dev'           # ← create this in Pipelines > Environments
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: Maven@3
+            displayName: 'mvn package (final JAR)'
+            inputs:
+              mavenPomFile: 'pom.xml'
+              javaHomeOption: 'Path'
+              jdkDirectory: 'C:\java\jdk-17'
+              jdkArchitectureOption: 'x64'
+              publishJUnitResults: false
+              goals: 'package -DskipTests'
 
-    - task: CopyFiles@2
-      displayName: 'Copy JAR to staging'
-      inputs:
-        contents: '**/target/*.jar'
-        targetFolder: '$(Build.ArtifactStagingDirectory)'
+          - task: CopyFiles@2
+            displayName: 'Copy JAR to staging'
+            inputs:
+              contents: '**/target/*.jar'
+              targetFolder: '$(Build.ArtifactStagingDirectory)'
 
-    - task: PublishBuildArtifacts@1
-      displayName: 'Publish final artifact'
-      inputs:
-        pathToPublish: '$(Build.ArtifactStagingDirectory)'
-        artifactName: $(artifactName)
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish final artifact'
+            inputs:
+              pathToPublish: '$(Build.ArtifactStagingDirectory)'
+              artifactName: $(artifactName)
