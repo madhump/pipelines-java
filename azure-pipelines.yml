@@ -1,4 +1,3 @@
-# Maven - Multi-Stage Pipeline
 trigger:
 - main
 
@@ -8,20 +7,21 @@ pool:
 variables:
   JAVA_HOME: 'C:\java\jdk-17'
   JAVA_HOME_11_X64: 'C:\java\jdk-17'
-  buildConfig: 'package'
-  artifactName: 'java-drop'
+  imageName: 'java-pipeline-demo'
+  acrLoginServer: 'madhumurundiacr.azurecr.io'
+  jfrogRegistry: 'madhump.jfrog.io'
+  jfrogRepo: 'madhump-docker'
+  imageTag: '$(Build.BuildId)'
 
 stages:
 
-# ─── STAGE 1: BUILD ───────────────────────────────────────
 - stage: Build
-  displayName: 'Build & Compile'
+  displayName: 'Stage 1 - Build'
   jobs:
   - job: MavenBuild
-    displayName: 'Maven Build'
     steps:
     - task: Maven@3
-      displayName: 'Compile & Package'
+      displayName: 'Compile Java'
       inputs:
         mavenPomFile: 'pom.xml'
         javaHomeOption: 'Path'
@@ -30,19 +30,11 @@ stages:
         publishJUnitResults: false
         goals: 'compile'
 
-    - task: PublishBuildArtifacts@1
-      displayName: 'Publish JAR artifact'
-      inputs:
-        pathToPublish: '$(Build.ArtifactStagingDirectory)'
-        artifactName: $(artifactName)
-
-# ─── STAGE 2: TEST ────────────────────────────────────────
 - stage: Test
-  displayName: 'Run Tests'
+  displayName: 'Stage 2 - Test'
   dependsOn: Build
   jobs:
   - job: MavenTest
-    displayName: 'Maven Test'
     steps:
     - task: Maven@3
       displayName: 'Run unit tests'
@@ -55,21 +47,18 @@ stages:
         testResultsFiles: '**/surefire-reports/TEST-*.xml'
         goals: 'test'
 
-# ─── STAGE 3: PACKAGE & DEPLOY ────────────────────────────
-- stage: Deploy
-  displayName: 'Package & Deploy'
+- stage: Package
+  displayName: 'Stage 3 - Package'
   dependsOn: Test
-  condition: succeeded()
   jobs:
   - deployment: MavenPackage
-    displayName: 'Package JAR'
-    environment: 'dev'           # ← create this in Pipelines > Environments
+    environment: 'dev'
     strategy:
       runOnce:
         deploy:
           steps:
           - task: Maven@3
-            displayName: 'mvn package (final JAR)'
+            displayName: 'Package WAR'
             inputs:
               mavenPomFile: 'pom.xml'
               javaHomeOption: 'Path'
@@ -77,15 +66,39 @@ stages:
               jdkArchitectureOption: 'x64'
               publishJUnitResults: false
               goals: 'package -DskipTests'
-
-          - task: CopyFiles@2
-            displayName: 'Copy JAR to staging'
-            inputs:
-              contents: '**/target/*.jar'
-              targetFolder: '$(Build.ArtifactStagingDirectory)'
-
           - task: PublishBuildArtifacts@1
-            displayName: 'Publish final artifact'
+            displayName: 'Publish WAR'
             inputs:
               pathToPublish: '$(Build.ArtifactStagingDirectory)'
-              artifactName: $(artifactName)
+              artifactName: 'java-drop'
+
+- stage: DockerBuild
+  displayName: 'Stage 4 - Docker Build + ACR'
+  dependsOn: Package
+  condition: succeeded()
+  jobs:
+  - job: Docker
+    steps:
+    - task: Docker@2
+      displayName: 'Build and push to ACR'
+      inputs:
+        command: 'buildAndPush'
+        dockerfile: 'Dockerfile'
+        containerRegistry: 'acr-connection'
+        repository: '$(imageName)'
+        tags: |
+          $(imageTag)
+          latest
+
+- stage: PushToJFrog
+  displayName: 'Stage 5 - Push to JFrog'
+  dependsOn: DockerBuild
+  condition: succeeded()
+  jobs:
+  - job: JFrogPush
+    steps:
+    - script: |
+        docker login $(jfrogRegistry) -u $(JFROG_USER) -p $(JFROG_PASSWORD)
+        docker tag $(acrLoginServer)/$(imageName):latest $(jfrogRegistry)/$(jfrogRepo)/$(imageName):$(imageTag)
+        docker push $(jfrogRegistry)/$(jfrogRepo)/$(imageName):$(imageTag)
+      displayName: 'Push to JFrog Artifactory'
