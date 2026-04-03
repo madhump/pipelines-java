@@ -94,8 +94,9 @@ stages:
         Write-Host "JFROG_USER is: $env:JFROG_USER"
         Write-Host "JFROG_PASSWORD length: $($env:JFROG_PASSWORD.Length)"
         Write-Host "Logging into JFrog..."
-        echo $env:JFROG_PASSWORD | docker login madhump.jfrog.io `
-          -u $env:JFROG_USER --password-stdin
+        $password = $env:JFROG_PASSWORD
+        $user = $env:JFROG_USER
+        $loginResult = $password | docker login madhump.jfrog.io -u $user --password-stdin
         if ($LASTEXITCODE -ne 0) {
           Write-Host "Login failed!"
           exit 1
