@@ -10,7 +10,7 @@ variables:
   imageName: 'java-pipeline-demo'
   acrLoginServer: 'madhumurundiacr.azurecr.io'
   jfrogRegistry: 'madhump.jfrog.io'
-  jfrogRepo: 'madhump-docker'
+  jfrogRepo: 'madhump-docker-local'
   imageTag: '$(Build.BuildId)'
 
 stages:
@@ -99,20 +99,20 @@ stages:
     displayName: 'Push to JFrog Artifactory'
     steps:
     - powershell: |
-        $user = "$(JFROG_USER)"
-        $pass = "$(JFROG_PASSWORD)"
-        $registry = "$(jfrogRegistry)"
-        $repo = "$(jfrogRepo)"
-        $image = "$(imageName)"
-        $acr = "$(acrLoginServer)"
-        $tag = "$(imageTag)"
-        
         Write-Host "Logging into JFrog..."
-        echo $pass | docker login $registry -u $user --password-stdin
-        
-        Write-Host "Tagging image..."
-        docker tag "$acr/${image}:latest" "$registry/$repo/${image}:$tag"
-        
+        echo $env:JFROG_PASSWORD | docker login madhump.jfrog.io `
+          -u $env:JFROG_USER --password-stdin
+        if ($LASTEXITCODE -ne 0) {
+          Write-Host "Login failed!"
+          exit 1
+        }
+        Write-Host "Login successful! Tagging image..."
+        docker tag madhumurundiacr.azurecr.io/java-pipeline-demo:latest `
+          madhump.jfrog.io/madhump-docker-local/java-pipeline-demo:$(imageTag)
         Write-Host "Pushing to JFrog..."
-        docker push "$registry/$repo/${image}:$tag"
+        docker push madhump.jfrog.io/madhump-docker-local/java-pipeline-demo:$(imageTag)
+        Write-Host "Successfully pushed to JFrog!"
       displayName: 'Push image to JFrog'
+      env:
+        JFROG_USER: $(JFROG_USER)
+        JFROG_PASSWORD: $(JFROG_PASSWORD)
