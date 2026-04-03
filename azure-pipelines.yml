@@ -96,9 +96,23 @@ stages:
   condition: succeeded()
   jobs:
   - job: JFrogPush
+    displayName: 'Push to JFrog Artifactory'
     steps:
-    - script: |
-        docker login $(jfrogRegistry) -u $(JFROG_USER) -p $(JFROG_PASSWORD)
-        docker tag $(acrLoginServer)/$(imageName):latest $(jfrogRegistry)/$(jfrogRepo)/$(imageName):$(imageTag)
-        docker push $(jfrogRegistry)/$(jfrogRepo)/$(imageName):$(imageTag)
-      displayName: 'Push to JFrog Artifactory'
+    - powershell: |
+        $user = "$(JFROG_USER)"
+        $pass = "$(JFROG_PASSWORD)"
+        $registry = "$(jfrogRegistry)"
+        $repo = "$(jfrogRepo)"
+        $image = "$(imageName)"
+        $acr = "$(acrLoginServer)"
+        $tag = "$(imageTag)"
+        
+        Write-Host "Logging into JFrog..."
+        echo $pass | docker login $registry -u $user --password-stdin
+        
+        Write-Host "Tagging image..."
+        docker tag "$acr/${image}:latest" "$registry/$repo/${image}:$tag"
+        
+        Write-Host "Pushing to JFrog..."
+        docker push "$registry/$repo/${image}:$tag"
+      displayName: 'Push image to JFrog'
