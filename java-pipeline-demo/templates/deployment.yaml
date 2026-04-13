@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-pipeline-demo
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: java-pipeline-demo
+  template:
+    metadata:
+      labels:
+        app: java-pipeline-demo
+        tags.datadoghq.com/service: java-pipeline-demo
+        tags.datadoghq.com/env: production
+        tags.datadoghq.com/version: {{ .Values.image.tag | quote }}
+    spec:
+      initContainers:
+        - name: dd-agent-init
+          image: datadog/dd-lib-java-init:latest
+          command: ["sh", "-c", "cp /datadog-init/package/dd-java-agent.jar /dd-agent"]
+          volumeMounts:
+            - name: dd-agent-volume
+              mountPath: /dd-agent
+      containers:
+        - name: java-pipeline-demo
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: dd-agent-volume
+              mountPath: /dd-agent
+          env:
+            - name: DD_AGENT_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: DD_SERVICE
+              value: "java-pipeline-demo"
+            - name: DD_ENV
+              value: "production"
+            - name: DD_VERSION
+              value: {{ .Values.image.tag | quote }}
+            - name: DD_TRACE_SAMPLE_RATE
+              value: "1"
+            - name: JAVA_TOOL_OPTIONS
+              value: "-javaagent:/dd-agent/dd-java-agent.jar"
+      volumes:
+        - name: dd-agent-volume
+          emptyDir: {}
